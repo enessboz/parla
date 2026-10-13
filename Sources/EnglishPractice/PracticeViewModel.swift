@@ -85,6 +85,7 @@ final class PracticeViewModel {
         isBusy = true
         defer { isBusy = false }
 
+        store.recordActivity()
         let userID = ChatItem(role: .user, text: text, words: words)
         items.append(userID)
 

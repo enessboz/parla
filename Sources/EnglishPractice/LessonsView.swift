@@ -61,8 +61,10 @@ struct LessonsView: View {
 struct LessonDetail: View {
     @Environment(PracticeViewModel.self) private var vm
     let content: LessonContent
+    var onComplete: (() -> Void)? = nil
     @State private var answers: [Int: String] = [:]
     @State private var checked = false
+    @State private var done = false
 
     var body: some View {
         ScrollView {
@@ -97,8 +99,14 @@ struct LessonDetail: View {
                                 }
                             }
                         }
-                        Button(checked ? "Sıfırla" : "Kontrol et") {
-                            if checked { answers = [:]; checked = false } else { checked = true }
+                        HStack {
+                            Button(checked ? "Sıfırla" : "Kontrol et") {
+                                if checked { answers = [:]; checked = false } else { checked = true }
+                            }
+                            if let onComplete {
+                                Button(done ? "Tamamlandı ✓" : "Dersi tamamla") { onComplete(); done = true }
+                                    .buttonStyle(.borderedProminent).disabled(done)
+                            }
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }

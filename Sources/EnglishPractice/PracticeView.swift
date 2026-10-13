@@ -20,6 +20,7 @@ struct PracticeView: View {
                     }
                     .padding(20)
                 }
+                .background(LinearGradient(colors: [Color.accentColor.opacity(0.07), .clear], startPoint: .top, endPoint: .bottom))
                 .onChange(of: vm.items.count) {
                     if let last = vm.items.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
                 }
@@ -139,8 +140,10 @@ struct MessageRow: View {
                 }
             }
             .padding(12)
-            .background(item.role == .user ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.12),
-                        in: RoundedRectangle(cornerRadius: 14))
+            .background(item.role == .user ? Color.accentColor.opacity(0.16) : Color.cardBackground,
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.primary.opacity(0.07)))
+            .shadow(color: .black.opacity(0.04), radius: 3, y: 1)
             if item.role == .assistant { Spacer(minLength: 60) }
         }
     }
