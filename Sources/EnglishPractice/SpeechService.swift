@@ -151,8 +151,15 @@ final class SpeechService: NSObject, AVSpeechSynthesizerDelegate {
         silenceTask?.cancel()
         guard autoStop, !liveTranscript.isEmpty else { return }
         silenceTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(1.7))
-            if !Task.isCancelled { self?.stop() }
+            try? await Task.sleep(for: .seconds(1.1))
+            if Task.isCancelled { return }
+            self?.stop()
+            // Don't wait for the recognizer's final pass: use the partial text if it is slow.
+            try? await Task.sleep(for: .seconds(0.7))
+            if Task.isCancelled { return }
+            guard let self, self.isListening else { return }
+            self.task?.cancel()
+            self.finish(words: self.liveTranscript.split(separator: " ").map { SpokenWord(text: String($0), confidence: 0) })
         }
     }
 
@@ -163,19 +170,53 @@ final class SpeechService: NSObject, AVSpeechSynthesizerDelegate {
         let u = AVSpeechUtterance(string: text)
         u.voice = AVSpeechSynthesisVoice(language: language)
         u.rate = max(AVSpeechUtteranceMinimumSpeechRate, min(AVSpeechUtteranceMaximumSpeechRate, rate))
+        queued = 1
         isSpeaking = true
         synth.speak(u)
     }
 
+    // Queued speech: sentences are enqueued while the LLM is still streaming.
+    private var queued = 0
+    private var holding = false
+
+    func beginQueue() {
+        stopSpeaking()
+        holding = true
+    }
+
+    func enqueue(_ text: String, language: String = "en-US", rate: Float = 0.5) {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        let u = AVSpeechUtterance(string: t)
+        u.voice = AVSpeechSynthesisVoice(language: language)
+        u.rate = max(AVSpeechUtteranceMinimumSpeechRate, min(AVSpeechUtteranceMaximumSpeechRate, rate))
+        queued += 1
+        isSpeaking = true
+        synth.speak(u)
+    }
+
+    /// Called when no more sentences will be enqueued. Fires `onSpeakFinished` once everything has been spoken.
+    func endQueue() {
+        holding = false
+        if queued == 0 {
+            isSpeaking = false
+            onSpeakFinished?()
+        }
+    }
+
     func stopSpeaking() {
+        queued = 0
+        holding = false
         if synth.isSpeaking { synth.stopSpeaking(at: .immediate) }
         isSpeaking = false
     }
 
     nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) {
         Task { @MainActor in
+            self.queued = max(0, self.queued - 1)
+            guard self.queued == 0 else { return }
             self.isSpeaking = false
-            self.onSpeakFinished?()
+            if !self.holding { self.onSpeakFinished?() }
         }
     }
     nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) {

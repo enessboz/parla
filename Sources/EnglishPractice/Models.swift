@@ -91,6 +91,11 @@ struct PracticeTurn: Codable {
     var errors: [DetectedError]
 }
 
+struct Correction: Codable {
+    var corrected: String
+    var errors: [DetectedError]
+}
+
 struct ChatItem: Identifiable {
     enum Role { case user, assistant }
     let id = UUID()

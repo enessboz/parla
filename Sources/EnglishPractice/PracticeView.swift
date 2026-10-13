@@ -16,7 +16,7 @@ struct PracticeView: View {
                         ForEach(vm.items) { item in
                             MessageRow(item: item).id(item.id)
                         }
-                        if vm.isBusy { ProgressView().padding() }
+                        if vm.isBusy, vm.items.last?.text.isEmpty ?? false { ProgressView().padding() }
                     }
                     .padding(20)
                 }
@@ -28,6 +28,9 @@ struct PracticeView: View {
 
             if let err = vm.errorMessage {
                 Text(err).font(.callout).foregroundStyle(.red).padding(.horizontal, 20).padding(.bottom, 6)
+            }
+            if let vs = vm.voiceStatus {
+                Text(vs).font(.headline).padding(.bottom, 6)
             }
             if let msg = vm.speech.statusMessage {
                 Text(msg).font(.callout).foregroundStyle(.orange).padding(.horizontal, 20).padding(.bottom, 6)
