@@ -7,12 +7,12 @@ Shared by the SSE endpoint (/api/chat) and the WebSocket (/ws/voice).
 import asyncio
 from typing import AsyncIterator, Awaitable, Callable
 
-from . import llm_models, ollama_client, scenarios, sessions
+from . import llm_models, memory, ollama_client, scenarios, sessions
 from .config import CHAT_HISTORY_LIMIT
 from .corrections import Job
 from .corrections import worker as correction_worker
 from .ollama_client import OllamaError
-from .prompts import chat_system_prompt
+from .prompts import FREE_OPENING_REQUEST, chat_system_prompt
 from .settings_store import get_settings
 
 Event = tuple[str, dict]
@@ -66,6 +66,7 @@ async def chat_turn(
     correction mode is "every"; with "end" it is only stored (for the session report).
     """
     settings = get_settings()
+    memory.cancel()  # a running memory refresh must not delay this reply
     if session_id is None or not sessions.session_exists(session_id):
         session_id = sessions.create_session("conversation")
 
@@ -74,6 +75,8 @@ async def chat_turn(
     llm_messages = [{"role": "system", "content": system_prompt(session_id, settings)}, *history]
 
     def queue_correction() -> None:
+        if sessions.mode_of(session_id) == "conversation":
+            memory.schedule(session_id)
         mode = settings["correction_mode"]
         if mode == "off":
             return
@@ -89,6 +92,19 @@ async def chat_turn(
             # Drop the unanswered message so a retry doesn't leave duplicates in history.
             if not data.pop("_partial"):
                 sessions.delete_message(user_message_id)
+        yield event, data
+
+
+async def free_opening_turn(session_id: int) -> AsyncIterator[Event]:
+    """The AI starts a free conversation, following up on what it remembers about the learner."""
+    settings = get_settings()
+    llm_messages = [
+        {"role": "system", "content": chat_system_prompt(settings)},
+        {"role": "user", "content": FREE_OPENING_REQUEST},  # not stored: only asks the model to begin
+    ]
+    yield "meta", {"session_id": session_id, "user_message_id": None}
+    async for event, data in _stream_reply(session_id, llm_messages):
+        data.pop("_partial", None)
         yield event, data
 
 

@@ -255,6 +255,14 @@ MIGRATIONS = [
     );
     CREATE INDEX IF NOT EXISTS idx_lesson_review_due ON lesson_review(due_date);
     """,
+    # 16: long-term conversation memory (backend/memory.py): short facts about the learner
+    """
+    CREATE TABLE IF NOT EXISTS memory_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );
+    """,
 ]
 
 

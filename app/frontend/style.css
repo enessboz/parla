@@ -1019,3 +1019,9 @@ label.choice input { margin-top: 4px; }
 .cloud-line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .cloud-line input[type="password"] { flex: 1 1 260px; min-width: 200px; }
 .cloud-line select, .cloud-line input[type="password"] { background: var(--bg-2); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+.memory-list { display: grid; gap: 6px; margin: 8px 0; }
+.memory-note { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; }
+.start-chat-btn { margin-top: 10px; }
+.hf-wrap { display: grid; gap: 6px; align-content: center; }
+#handsfree-btn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.hf-wrap select { background: var(--bg-2); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 5px 8px; font-size: 12px; }

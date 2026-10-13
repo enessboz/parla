@@ -20,6 +20,8 @@ async def openai(req: Request):
         return JSONResponse({"error": {"message": "bad key"}}, 401)
     body = await req.json()
     if body.get("response_format"):
+        if any('"notes"' in m["content"] for m in body["messages"]):
+            return {"choices": [{"message": {"content": json.dumps({"notes": ["Works as a nurse in Ankara.", "Likes football."]})}}]}
         content = json.dumps({"corrected": "I went to school.", "errors": []})
         return {"choices": [{"message": {"content": content}}]}
     text = reply_for(body["messages"])

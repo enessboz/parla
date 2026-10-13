@@ -12,9 +12,9 @@ from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import cloud_llm, corrections, dictionary, errors, exams, lessons, llm_models, machine, ollama_client, patterns, progress, report, reset, reviews, scenarios, selftest, sessions, sync, teacher, teacher_speech, ui_state, updates, vocab, words, writing
+from . import cloud_llm, corrections, dictionary, memory, errors, exams, lessons, llm_models, machine, ollama_client, patterns, progress, report, reset, reviews, scenarios, selftest, sessions, sync, teacher, teacher_speech, ui_state, updates, vocab, words, writing
 from .tts_tr import tts_tr
-from .chat import chat_turn, opening_turn
+from .chat import chat_turn, free_opening_turn, opening_turn
 from .corrections import worker as correction_worker
 from .config import FRONTEND_DIR, script
 from .db import init_db
@@ -75,6 +75,13 @@ async def revalidate_static_files(request, call_next):
 @app.get("/api/health")
 async def health():
     model = llm_models.current()
+    if cloud_llm.is_cloud(model):
+        provider = cloud_llm.split(model)[0]
+        has_key = bool(cloud_llm.get_key(provider))
+        ollama = {"ok": has_key, "cloud": True,
+                  "message": (f"Bulut model: {cloud_llm.label(model)}" if has_key
+                              else f"{cloud_llm.PROVIDERS[provider]['label']} API anahtarı yok (Ayarlar → Bulut modeller).")}
+        return _health_payload(ollama)
     try:
         models = await ollama_client.list_models()
         if model in models or f"{model}:latest" in models:
@@ -87,7 +94,10 @@ async def health():
             }
     except OllamaError as e:
         ollama = {"ok": False, "message": str(e)}
+    return _health_payload(ollama)
 
+
+def _health_payload(ollama: dict) -> dict:
     return {
         "restart_needed": _code_stamp() > CODE_STAMP,
         "start_script": script("start"),  # Baslat.bat / baslat.sh, for the messages in the page
@@ -289,6 +299,36 @@ async def llm_state():
 async def llm_catalog():
     """Catalog cards with the setup wizard's fit badges for this computer."""
     return {"models": await llm_models.manager.catalog()}
+
+
+# --- memory (what the conversation partner remembers about the learner)
+
+@app.get("/api/memory")
+async def memory_list():
+    return {"notes": memory.notes()}
+
+
+@app.delete("/api/memory/{note_id}")
+async def memory_delete(note_id: int):
+    memory.delete(note_id)
+    return {"notes": memory.notes()}
+
+
+@app.delete("/api/memory")
+async def memory_clear():
+    memory.clear()
+    return {"notes": []}
+
+
+class MemoryNote(BaseModel):
+    text: str
+
+
+@app.post("/api/memory")
+async def memory_add(body: MemoryNote):
+    texts = [n["text"] for n in memory.notes()] + [body.text]
+    memory.set_all(texts)
+    return {"notes": memory.notes()}
 
 
 # --- cloud models (OpenAI / Claude)
@@ -1201,6 +1241,11 @@ async def voice(ws: WebSocket):
                 "audio_seconds": result["audio_seconds"], "stt_ms": result["elapsed_ms"]}
         await run_chat(header, result["text"], meta)
 
+    async def run_free_opening(header: dict) -> None:
+        """The AI starts a free conversation (it follows up on what it remembers about the learner)."""
+        session_id = sessions.create_session("conversation")
+        await run_turn(header, free_opening_turn(session_id))
+
     async def run_scenario(header: dict) -> None:
         client_id = header.get("client_id")
         custom = str(header.get("custom") or "").strip()
@@ -1253,6 +1298,8 @@ async def voice(ws: WebSocket):
                     start(run_chat(data, data["text"].strip()[:4000], {"source": "text"}))
                 elif kind == "start_scenario":
                     start(run_scenario(data))
+                elif kind == "start_chat":
+                    start(run_free_opening(data))
                 elif kind == "cancel" and turn:
                     turn.cancel()
             elif msg.get("bytes") is not None and audio_header is not None:

@@ -58,13 +58,24 @@
             <div id="chat" class="chat">
               <div class="empty-hint">
                 Merhaba! 👋 Mikrofon butonuna basılı tutup İngilizce konuş ya da yaz.<br>
-                <small>Örn: "Hi! I want to practice talking about my weekend."</small>
+                <small>Örn: "Hi! I want to practice talking about my weekend."</small><br>
+                <button type="button" class="ghost small start-chat-btn" data-start-chat>✨ Sohbeti sen başlat (beni hatırlayarak)</button>
               </div>
             </div>
             <div class="composer">
               <div class="talk-wrap">
                 <button id="talk-btn" class="talk-btn" disabled aria-label="Bas ve konuş">🎤</button>
                 <span id="talk-hint" class="talk-hint">Whisper yükleniyor…</span>
+              </div>
+              <div class="hf-wrap">
+                <button id="handsfree-btn" class="ghost small" type="button" aria-pressed="false"
+                  title="Mikrofon kendiliğinden açılır; konuşmayı bitirince gönderilir, cevap okunur, sonra tekrar dinler.">🎙 Eller serbest</button>
+                <select id="handsfree-pause" class="small" aria-label="Susunca gönderme süresi" title="Susunca ne kadar bekleyip göndersin? Cümleni bitirmeden gönderiyorsa artır.">
+                  <option value="1200">Bekleme: kısa</option>
+                  <option value="1800" selected>Bekleme: normal</option>
+                  <option value="2600">Bekleme: uzun</option>
+                  <option value="3600">Bekleme: çok uzun</option>
+                </select>
               </div>
               <button id="stop-btn" class="stop-btn" hidden>⏹ Durdur</button>
               <form id="chat-form" class="chat-form">
@@ -410,6 +421,14 @@
             <div id="models-catalog" class="models-catalog" hidden></div>
           </section>
 
+          <section class="models-section" id="memory-section" aria-labelledby="memory-title">
+            <div class="section-head"><h3 id="memory-title">🧠 Konuşma partnerinin hafızası</h3>
+              <div class="actions"><button type="button" id="memory-clear" class="ghost small danger">Hepsini unut</button></div></div>
+            <p class="muted small">Serbest sohbetlerde senin hakkında öğrendikleri (adın, işin, planların…). Sonraki sohbetlerde bunlara dönüp sorular sorar. Burada silebilir ya da yenisini ekleyebilirsin; bu bilgiler yapay zekâya (bulut model seçtiysen onun sunucusuna) sohbetle birlikte gönderilir.</p>
+            <div id="memory-list" class="memory-list"></div>
+            <form id="memory-form" class="cloud-line"><input id="memory-input" type="text" maxlength="200" placeholder="Not ekle: ör. Ankara'da hemşire olarak çalışıyorum" autocomplete="off"><button class="ghost small" type="submit">Ekle</button></form>
+          </section>
+
           <section class="models-section" id="cloud-section" aria-labelledby="cloud-title">
             <div class="section-head"><h3 id="cloud-title">☁️ Bulut modeller (OpenAI / Claude)</h3></div>
             <p class="muted small">Yerel model yerine bulutta çalışan, çok daha güçlü bir model kullanabilirsin. API anahtarı gerekir (ChatGPT / Claude aboneliğinden ayrıdır, kullandıkça ödenir); anahtar yalnızca bu bilgisayarda saklanır, senkronize edilmez. Cevaplar internet üzerinden üretilir.</p>
@@ -452,6 +471,8 @@
   <script src="app.js"></script>
   <script src="models.js"></script>
   <script src="cloud.js"></script>
+  <script src="memory.js"></script>
+  <script src="handsfree.js"></script>
   <script src="corrections.js"></script>
   <script src="scenarios.js"></script>
   <script src="writing.js"></script>

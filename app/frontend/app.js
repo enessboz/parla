@@ -229,7 +229,7 @@ async function refreshStatus() {
   const problems = [];
   for (const pill of $$("#status .pill")) {
     const name = pill.dataset.service;
-    const label = { ollama: "Ollama", whisper: "Whisper", tts: "TTS" }[name];
+    const label = { ollama: health?.ollama?.cloud ? "Bulut" : "Ollama", whisper: "Whisper", tts: "TTS" }[name];
     const s = health?.[name];
     pill.classList.remove("ok", "err");
     if (!health) {
@@ -380,7 +380,7 @@ function resetChat() {
   chat.sessionId = null;
   chat.endedSessionId = null;
   store.set("sessionId", null);
-  chatEl.innerHTML = `<div class="empty-hint">Yeni sohbet. 🎤 butonuna basılı tutup konuş ya da yaz!</div>`;
+  chatEl.innerHTML = `<div class="empty-hint">Yeni sohbet. 🎤 butonuna basılı tutup konuş ya da yaz!<br><button type="button" class="ghost small start-chat-btn" data-start-chat>✨ Sohbeti sen başlat (beni hatırlayarak)</button></div>`;
   clearCorrections();
   hideBanner();
   updateFinishButton();
