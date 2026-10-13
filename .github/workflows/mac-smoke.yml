@@ -1,0 +1,42 @@
+name: macOS smoke test
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['native-swift/**', '*.md']
+  workflow_dispatch:
+jobs:
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bootstrap (portable Python + wizard deps)
+        run: |
+          set -o pipefail
+          EP_BOOTSTRAP_ONLY=1 bash kurulum.sh 2>&1 | tee boot.log || { grep -v '^$' boot.log | tail -15 | while IFS= read -r l; do echo "::error::${l:0:400}"; done; exit 1; }
+      - name: Install app packages
+        run: |
+          set -o pipefail
+          runtime/python/bin/python3 -m pip install -q --no-cache-dir -r app/requirements.txt 2>&1 | tee pip.log || { tail -15 pip.log | while IFS= read -r l; do echo "::error::${l:0:400}"; done; exit 1; }
+      - name: Hardware scan
+        run: runtime/python/bin/python3 setup/hardware.py
+      - name: Ollama download layout
+        run: |
+          mkdir -p /tmp/ol && cd /tmp/ol
+          curl -fL -sS -o ollama-darwin.tgz https://github.com/ollama/ollama/releases/latest/download/ollama-darwin.tgz
+          ls -la ollama-darwin.tgz
+          tar -xzf ollama-darwin.tgz
+          find . -maxdepth 2 | head -30
+          ./ollama --version || true
+      - name: App + fake Ollama
+        run: |
+          set -o pipefail
+          PY=$PWD/runtime/python/bin/python3
+          (cd dev/tests && nohup $PY -m uvicorn fake_ollama:app --port 11500 > /tmp/fake.log 2>&1 &)
+          (cd app && EP_DATA_DIR=/tmp/epdata EP_SKIP_SPEECH=1 OLLAMA_HOST=127.0.0.1:11500 nohup $PY -m uvicorn backend.main:app --host 127.0.0.1 --port 8100 > /tmp/app.log 2>&1 &)
+          for i in $(seq 1 30); do curl -sf localhost:8100/api/health >/dev/null && break; sleep 1; done
+          curl -sS localhost:8100/api/health || { tail -20 /tmp/app.log | while IFS= read -r l; do echo "::error::${l:0:400}"; done; exit 1; }
+          echo
+      - name: Content tests
+        run: |
+          PY=$PWD/runtime/python/bin/python3
+          for t in lessons_content_test patterns_content_test review_content_test yds_content_test; do echo "== $t"; $PY dev/tests/$t.py || exit 1; done

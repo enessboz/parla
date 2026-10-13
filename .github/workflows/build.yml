@@ -1,7 +1,8 @@
-name: Build macOS app
+name: Build native Swift app (experimental)
 on:
   push:
     branches: [main]
+    paths: ['native-swift/**', '.github/workflows/build.yml']
   workflow_dispatch:
 permissions:
   contents: write
@@ -11,6 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build
+        working-directory: native-swift
         run: |
           set -o pipefail
           ./build_app.sh 2>&1 | tee build.log || {
@@ -18,14 +20,15 @@ jobs:
             exit 1
           }
       - name: Zip
+        working-directory: native-swift
         run: ditto -c -k --keepParent EnglishPractice.app EnglishPractice-mac.zip
       - uses: actions/upload-artifact@v4
         with:
           name: EnglishPractice-mac
-          path: EnglishPractice-mac.zip
+          path: native-swift/EnglishPractice-mac.zip
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete latest -y --cleanup-tag || true
-          gh release create latest EnglishPractice-mac.zip --title "Latest build" --notes "Automated build of ${{ github.sha }}"
+          gh release delete native-swift -y --cleanup-tag || true
+          gh release create native-swift native-swift/EnglishPractice-mac.zip --title "Native Swift build (experimental)" --notes "Automated build of ${{ github.sha }}"
