@@ -41,3 +41,23 @@ jobs:
         run: |
           PY=$PWD/runtime/python/bin/python3
           for t in lessons_content_test patterns_content_test review_content_test yds_content_test; do echo "== $t"; $PY dev/tests/$t.py || exit 1; done
+      - name: Launcher end-to-end (bundled Ollama + app)
+        run: |
+          PY=$PWD/runtime/python/bin/python3
+          mkdir -p runtime/ollama && curl -fL -sS -o /tmp/ollama.tgz https://github.com/ollama/ollama/releases/latest/download/ollama-darwin.tgz && tar -xzf /tmp/ollama.tgz -C runtime/ollama
+          chmod +x runtime/ollama/ollama
+          PYTHONPATH=app:. $PY -c "
+          from backend import machine
+          machine.save_profile({'default_model': 'gemma3:4b', 'whisper_model': 'base.en', 'whisper_device': 'cpu', 'detected': {}})"
+          EP_SKIP_SPEECH=1 nohup bash baslat.sh --no-browser > /tmp/launcher.out 2>&1 &
+          OK=0
+          for i in $(seq 1 60); do
+            for p in 8000 8080 8765 18000 28000; do
+              if curl -sf localhost:$p/api/health > /tmp/h.json; then OK=1; break 2; fi
+            done
+            sleep 2
+          done
+          echo "::notice::launcher out: $(tail -12 /tmp/launcher.out | tr '\n' '|' | head -c 800)"
+          echo "::notice::health: $(head -c 400 /tmp/h.json 2>/dev/null)"
+          echo "::notice::ollama procs: $(pgrep -fl 'ollama serve' | head -3 | tr '\n' '|')"
+          [ "$OK" = 1 ] || { tail -20 logs/launcher.log 2>/dev/null | while IFS= read -r l; do echo "::error::${l:0:400}"; done; exit 1; }
