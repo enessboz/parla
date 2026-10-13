@@ -11,7 +11,7 @@ struct VocabView: View {
     @State private var level = "Tümü"
 
     private var words: [VocabWord] {
-        level == "Tümü" ? Content.vocabulary : Content.vocabulary.filter { $0.level == level }
+        level == "Tümü" ? AppContent.vocabulary : AppContent.vocabulary.filter { $0.level == level }
     }
 
     var body: some View {
@@ -204,7 +204,7 @@ struct QuizView: View {
     }
 
     private func start() {
-        let pool = Content.vocabulary
+        let pool = AppContent.vocabulary
         questions = words.shuffled().prefix(10).map { w in
             let wrong = pool.filter { $0.tr != w.tr }.shuffled().prefix(3).map(\.tr)
             return QuizQuestion(word: w, options: ([w.tr] + wrong).shuffled())

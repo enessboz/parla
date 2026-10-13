@@ -27,7 +27,7 @@ private func L(_ id: String, _ title: String, _ explanation: String, _ examples:
         exercises: ex.map { .init(prompt: $0.0, answer: $0.1) }))
 }
 
-enum Content {
+enum AppContent {
     static let levels: [Level] = [
         Level(code: "A1", name: "Başlangıç", lessons: [
             L("a1-be", "To be: am / is / are",

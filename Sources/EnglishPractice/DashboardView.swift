@@ -17,7 +17,7 @@ struct DashboardView: View {
 
     var body: some View {
         let summaries = LessonGenerator.summarize(store.mistakes).prefix(5)
-        let due = store.dueCount(Content.vocabulary)
+        let due = store.dueCount(AppContent.vocabulary)
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -28,8 +28,8 @@ struct DashboardView: View {
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 14)], spacing: 14) {
                     StatCard(icon: "flame.fill", color: .orange, value: "\(store.streak)", label: "günlük seri")
-                    StatCard(icon: "textformat.abc", color: .blue, value: "\(store.masteredCount)/\(Content.vocabulary.count)", label: "öğrenilen kelime")
-                    StatCard(icon: "graduationcap.fill", color: .purple, value: "\(store.completedLessons.count)/\(Content.allLessons.count)", label: "tamamlanan ders")
+                    StatCard(icon: "textformat.abc", color: .blue, value: "\(store.masteredCount)/\(AppContent.vocabulary.count)", label: "öğrenilen kelime")
+                    StatCard(icon: "graduationcap.fill", color: .purple, value: "\(store.completedLessons.count)/\(AppContent.allLessons.count)", label: "tamamlanan ders")
                     StatCard(icon: "exclamationmark.bubble.fill", color: .red, value: "\(store.mistakes.count)", label: "kayıtlı hata")
                 }
 
@@ -69,7 +69,7 @@ struct DashboardView: View {
                         suggestion(icon: "wand.and.stars", color: .purple,
                                    title: "\(top.kind.turkish) için özel ders", detail: "En çok yaptığın hata türü; sana özel ders üret.", target: .smart)
                     }
-                    if let next = Content.allLessons.first(where: { !store.completedLessons.contains($0.id) }) {
+                    if let next = AppContent.allLessons.first(where: { !store.completedLessons.contains($0.id) }) {
                         suggestion(icon: "book.fill", color: .indigo,
                                    title: "Sıradaki ders: \(next.content.title)", detail: "Müfredatta kaldığın yerden devam et.", target: .curriculum)
                     }
