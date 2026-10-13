@@ -29,6 +29,9 @@ struct PracticeView: View {
             if let err = vm.errorMessage {
                 Text(err).font(.callout).foregroundStyle(.red).padding(.horizontal, 20).padding(.bottom, 6)
             }
+            if let msg = vm.speech.statusMessage {
+                Text(msg).font(.callout).foregroundStyle(.orange).padding(.horizontal, 20).padding(.bottom, 6)
+            }
             if vm.speech.isListening {
                 Text(vm.speech.liveTranscript.isEmpty ? "Dinliyorum…" : vm.speech.liveTranscript)
                     .foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 6)

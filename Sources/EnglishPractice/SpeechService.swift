@@ -10,6 +10,8 @@ final class SpeechService: NSObject, AVSpeechSynthesizerDelegate {
     var isListening = false
     var liveTranscript = ""
     var authorizationDenied = false
+    /// Human-readable diagnostics shown under the input bar.
+    var statusMessage: String?
     /// When true, listening stops by itself after a short silence (hands-free mode).
     var autoStop = false
     var onSpeakFinished: (() -> Void)?
@@ -31,17 +33,43 @@ final class SpeechService: NSObject, AVSpeechSynthesizerDelegate {
 
     // MARK: Recognition
 
-    func requestAuthorization() async -> Bool {
-        let speech = await withCheckedContinuation { c in
-            SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0 == .authorized) }
+    nonisolated private static func askSpeech() async -> SFSpeechRecognizerAuthorizationStatus {
+        await withCheckedContinuation { c in
+            SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0) }
         }
-        let mic = await AVCaptureDevice.requestAccess(for: .audio)
-        authorizationDenied = !(speech && mic)
-        return speech && mic
+    }
+
+    nonisolated private static func askMic() async -> Bool {
+        await AVCaptureDevice.requestAccess(for: .audio)
+    }
+
+    nonisolated private static func tapBlock(_ req: SFSpeechAudioBufferRecognitionRequest) -> AVAudioNodeTapBlock {
+        { buffer, _ in req.append(buffer) }
+    }
+
+    func requestAuthorization() async -> Bool {
+        let speech = await Self.askSpeech()
+        guard speech == .authorized else {
+            authorizationDenied = true
+            statusMessage = "Konuşma tanıma izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Konuşma Tanıma bölümünden English Practice'i aç."
+            return false
+        }
+        guard await Self.askMic() else {
+            authorizationDenied = true
+            statusMessage = "Mikrofon izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Mikrofon bölümünden English Practice'i aç."
+            return false
+        }
+        authorizationDenied = false
+        return true
     }
 
     func start(onFinal: @escaping ([SpokenWord]) -> Void) async {
-        guard !isListening, let recognizer, recognizer.isAvailable else { return }
+        guard !isListening else { return }
+        statusMessage = nil
+        guard let recognizer, recognizer.isAvailable else {
+            statusMessage = "Konuşma tanıma şu an kullanılamıyor. İnternete bağlı mısın? Sistem Ayarları › Klavye › Dikte açık olmalı."
+            return
+        }
         guard await requestAuthorization() else { return }
         stopSpeaking()
 
@@ -49,33 +77,52 @@ final class SpeechService: NSObject, AVSpeechSynthesizerDelegate {
         liveTranscript = ""
         let req = SFSpeechAudioBufferRecognitionRequest()
         req.shouldReportPartialResults = true
-        if recognizer.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
         request = req
 
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            statusMessage = "Mikrofon bulunamadı veya erişilemiyor (giriş cihazını Sistem Ayarları › Ses bölümünde kontrol et)."
+            request = nil; self.onFinal = nil
+            return
+        }
         input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak req] buf, _ in req?.append(buf) }
+        input.installTap(onBus: 0, bufferSize: 1024, format: format, block: Self.tapBlock(req))
         engine.prepare()
-        do { try engine.start() } catch { return }
+        do { try engine.start() } catch {
+            statusMessage = "Ses motoru başlatılamadı: \(error.localizedDescription)"
+            input.removeTap(onBus: 0)
+            request = nil; self.onFinal = nil
+            return
+        }
         isListening = true
 
         task = recognizer.recognitionTask(with: req) { [weak self] result, error in
+            let text = result?.bestTranscription.formattedString
+            let isFinal = result?.isFinal ?? false
+            let words = result?.bestTranscription.segments.map { SpokenWord(text: $0.substring, confidence: $0.confidence) } ?? []
+            let errText = error?.localizedDescription
             Task { @MainActor in
                 guard let self else { return }
-                if let result {
-                    self.liveTranscript = result.bestTranscription.formattedString
+                if let text {
+                    self.liveTranscript = text
                     self.armSilenceTimer()
-                    if result.isFinal {
-                        let words = result.bestTranscription.segments.map {
-                            SpokenWord(text: $0.substring, confidence: $0.confidence)
-                        }
-                        self.finish(words: words)
-                    }
-                } else if error != nil {
-                    self.finish(words: self.liveTranscript.split(separator: " ").map { SpokenWord(text: String($0), confidence: 0) })
+                    if isFinal { self.finish(words: words) }
+                } else if let errText {
+                    self.fail(errText)
                 }
             }
+        }
+    }
+
+    private func fail(_ message: String) {
+        let heard = !liveTranscript.isEmpty
+        if heard {
+            // Got some text before the error: deliver it.
+            finish(words: liveTranscript.split(separator: " ").map { SpokenWord(text: String($0), confidence: 0) })
+        } else {
+            statusMessage = "Ses tanınamadı: \(message). Konuşmadıysan sorun yok; hata sürerse Sistem Ayarları › Klavye › Dikte'yi aç."
+            finish(words: [])
         }
     }
 
