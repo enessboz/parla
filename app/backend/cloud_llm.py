@@ -23,6 +23,10 @@ PROVIDERS = {
                "fallback": ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1"]},
 }
 
+# Overridable for tests (a fake server).
+OPENAI_BASE = os.environ.get("EP_OPENAI_BASE", "https://api.openai.com")
+ANTHROPIC_BASE = os.environ.get("EP_ANTHROPIC_BASE", "https://api.anthropic.com")
+
 _client = httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=10.0))
 
 
@@ -144,8 +148,8 @@ def _claude_body(model: str, messages: list[dict], options: dict | None, stream:
 def _request(provider: str, body: dict) -> tuple[str, dict]:
     key = _need_key(provider)
     if provider == "openai":
-        return "https://api.openai.com/v1/chat/completions", {"Authorization": f"Bearer {key}"}
-    return "https://api.anthropic.com/v1/messages", {"x-api-key": key, "anthropic-version": "2023-06-01"}
+        return f"{OPENAI_BASE}/v1/chat/completions", {"Authorization": f"Bearer {key}"}
+    return f"{ANTHROPIC_BASE}/v1/messages", {"x-api-key": key, "anthropic-version": "2023-06-01"}
 
 
 # ------------------------------------------------------------------ public API
@@ -234,6 +238,14 @@ _BANNED = ("audio", "realtime", "transcribe", "tts", "image", "search", "instruc
            "vision", "codex", "whisper", "dall", "computer", "chat-latest", "deep-research")
 
 
+_cache: dict[str, list[str]] = {}
+
+
+def picker_models(provider: str) -> list[str]:
+    """Models offered in the chat picker for a configured provider (cached live list, else the fallback)."""
+    return recommended(provider, _cache.get(provider) or PROVIDERS[provider]["fallback"])
+
+
 async def list_models(provider: str) -> list[str]:
     """The models this account can use (live), or a sensible fallback list when offline / no key."""
     fallback = list(PROVIDERS[provider]["fallback"])
@@ -242,19 +254,21 @@ async def list_models(provider: str) -> list[str]:
         return fallback
     try:
         if provider == "openai":
-            resp = await _client.get("https://api.openai.com/v1/models", headers={"Authorization": f"Bearer {key}"}, timeout=15)
+            resp = await _client.get(f"{OPENAI_BASE}/v1/models", headers={"Authorization": f"Bearer {key}"}, timeout=15)
             if resp.status_code != 200:
                 return fallback
             ids = [m["id"] for m in resp.json().get("data", [])]
             ids = [i for i in ids if i.startswith(("gpt-", "o1", "o3", "o4"))
                    and not any(b in i for b in _BANNED)
                    and not re.search(r"-\d{4}-\d{2}-\d{2}$|-\d{4}$", i)]
-            return sorted(set(ids)) or fallback
-        resp = await _client.get("https://api.anthropic.com/v1/models?limit=100",
+            _cache[provider] = sorted(set(ids)) or fallback
+            return _cache[provider]
+        resp = await _client.get(f"{ANTHROPIC_BASE}/v1/models?limit=100",
                                  headers={"x-api-key": key, "anthropic-version": "2023-06-01"}, timeout=15)
         if resp.status_code != 200:
             return fallback
-        return [m["id"] for m in resp.json().get("data", [])] or fallback
+        _cache[provider] = [m["id"] for m in resp.json().get("data", [])] or fallback
+        return _cache[provider]
     except (httpx.HTTPError, ValueError, KeyError):
         return fallback
 

@@ -12,7 +12,7 @@ from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import corrections, dictionary, errors, exams, lessons, llm_models, machine, ollama_client, patterns, progress, report, reset, reviews, scenarios, selftest, sessions, sync, teacher, teacher_speech, ui_state, updates, vocab, words, writing
+from . import cloud_llm, corrections, dictionary, errors, exams, lessons, llm_models, machine, ollama_client, patterns, progress, report, reset, reviews, scenarios, selftest, sessions, sync, teacher, teacher_speech, ui_state, updates, vocab, words, writing
 from .tts_tr import tts_tr
 from .chat import chat_turn, opening_turn
 from .corrections import worker as correction_worker
@@ -289,6 +289,53 @@ async def llm_state():
 async def llm_catalog():
     """Catalog cards with the setup wizard's fit badges for this computer."""
     return {"models": await llm_models.manager.catalog()}
+
+
+# --- cloud models (OpenAI / Claude)
+
+@app.get("/api/cloud")
+async def cloud_state():
+    """For each provider: is a key stored, which models can be used (live list), which are recommended."""
+    out = []
+    for pid, info in cloud_llm.PROVIDERS.items():
+        has_key = bool(cloud_llm.get_key(pid))
+        models = await cloud_llm.list_models(pid) if has_key else list(info["fallback"])
+        out.append({"id": pid, "label": info["label"], "configured": has_key, "default_model": info["default"],
+                    "models": models, "recommended": cloud_llm.recommended(pid, models)})
+    return {"providers": out}
+
+
+class CloudKey(BaseModel):
+    provider: str
+    key: str = ""
+
+
+@app.put("/api/cloud/key")
+async def cloud_key(body: CloudKey):
+    try:
+        cloud_llm.set_key(body.provider, body.key)
+    except cloud_llm.CloudError as e:
+        raise HTTPException(400, str(e))
+    if body.key.strip():
+        await cloud_llm.list_models(body.provider)  # warm the model list
+    return await cloud_state()
+
+
+class CloudTest(BaseModel):
+    model: str
+
+
+@app.post("/api/cloud/test")
+async def cloud_test(body: CloudTest):
+    """One tiny request: proves the key, the model name and the connection work."""
+    if not cloud_llm.is_cloud(body.model):
+        raise HTTPException(400, "Bulut modeli seçin.")
+    try:
+        text = await cloud_llm.complete(body.model, [{"role": "user", "content": "Say hello in exactly three words."}],
+                                        {"num_predict": 30, "temperature": 0.2})
+    except cloud_llm.CloudError as e:
+        return {"ok": False, "error": str(e)}
+    return {"ok": bool(text), "text": text, "error": None if text else "Boş cevap geldi; başka bir model deneyin."}
 
 
 class ModelChoice(BaseModel):

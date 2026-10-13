@@ -1013,3 +1013,9 @@ label.choice input { margin-top: 4px; }
 .st-history { display: flex; flex-direction: column; gap: 6px; }
 .st-history .vocab-row { cursor: pointer; }
 .st-history .vocab-row:hover { border-color: var(--accent); }
+
+/* Cloud models (settings) */
+.cloud-provider { border: 1px solid var(--border, #2a3140); border-radius: 10px; padding: 12px; margin: 10px 0; display: grid; gap: 8px; }
+.cloud-line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cloud-line input[type="password"] { flex: 1 1 260px; min-width: 200px; }
+.cloud-line select, .cloud-line input[type="password"] { background: var(--bg-2); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }

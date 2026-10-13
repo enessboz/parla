@@ -198,7 +198,8 @@ function renderInstalled(s) {
       m.translation && elm("span", { class: "badge installed" }, "Çeviri modeli"),
     ];
     const details = [m.id, ModelCards.size(m.size_bytes), m.parameter_size, m.quantization].filter(Boolean).join(" · ");
-    const speed = m.translation ? elm("span", { class: "muted small" }, "Sadece cümle çevirisi")
+    const speed = m.cloud ? elm("span", { class: "muted small" }, "Bulut modeli — hız internet bağlantına bağlı")
+      : m.translation ? elm("span", { class: "muted small" }, "Sadece cümle çevirisi")
       : r ? elm("span", { class: r.tokens_per_sec < SLOW_TOKENS_PER_SEC ? "warn-text" : "" },
         elm("strong", {}, `${r.tokens_per_sec} token/sn`),
         elm("span", { class: "muted small" }, ` · ilk kelime ${r.first_token_ms} ms · ${formatDate(r.measured_at)}`))
@@ -211,9 +212,9 @@ function renderInstalled(s) {
       elm("div", { class: "model-actions" },
         !m.translation && !isDefault && elm("button", { class: "ghost small", type: "button", disabled: busy,
           onclick: () => modelAction("/api/llm/default", { model: m.id }, "PUT") }, "Varsayılan yap"),
-        !m.translation && elm("button", { class: "ghost small", type: "button", disabled: busy,
+        !m.translation && !m.cloud && elm("button", { class: "ghost small", type: "button", disabled: busy,
           title: "Bu modelin bu bilgisayardaki hızını ölç", onclick: () => startBenchmark([m.id]) }, "⏱ Test"),
-        elm("button", { class: "ghost small danger", type: "button", disabled: busy || isDefault,
+        !m.cloud && elm("button", { class: "ghost small danger", type: "button", disabled: busy || isDefault,
           title: isDefault ? "Varsayılan model silinemez; önce başka bir modeli varsayılan yap." : "",
           onclick: () => deleteModel(m) }, "Sil")));
   }));

@@ -209,7 +209,8 @@ class ModelManager:
         bench = machine.load_profile().get("benchmarks", {})
         out = []
         for p in cloud_llm.configured():
-            for m in cloud_llm.PROVIDERS[p]["fallback"]:
+            chosen = {m for m in (self.override, default_model()) if m and m.startswith(p + ":")}
+            for m in dict.fromkeys(cloud_llm.picker_models(p) + [c.split(":", 1)[1] for c in chosen]):
                 out.append({"id": f"{p}:{m}", "name": display_name(f"{p}:{m}"), "size_bytes": 0, "cloud": True,
                             "parameter_size": None, "quantization": None, "translation": False, "benchmark": None})
         for m in await ollama_client.installed_models():

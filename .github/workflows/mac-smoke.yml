@@ -19,7 +19,7 @@ jobs:
           runtime/python/bin/python3 -m pip install -q --no-cache-dir -r app/requirements.txt 2>&1 | tee pip.log || { tail -15 pip.log | while IFS= read -r l; do echo "::error::${l:0:400}"; done; exit 1; }
       - name: Hardware scan
         run: |
-          runtime/python/bin/python3 setup/hardware.py | tr -d '\n ' | while IFS= read -r l; do echo "::notice::hardware ${l:0:600}"; done
+          echo "::notice::hardware $(runtime/python/bin/python3 setup/hardware.py | tr -d '\n ' | head -c 700)"
       - name: Ollama download layout
         run: |
           mkdir -p /tmp/ol && cd /tmp/ol
