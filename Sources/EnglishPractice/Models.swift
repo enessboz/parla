@@ -91,6 +91,16 @@ struct PracticeTurn: Codable {
     var errors: [DetectedError]
 }
 
+struct StoredMessage: Codable {
+    var isUser: Bool
+    var text: String
+    var date: Date = .now
+}
+
+struct MemoryUpdate: Codable {
+    var notes: [String]
+}
+
 struct Correction: Codable {
     var corrected: String
     var errors: [DetectedError]

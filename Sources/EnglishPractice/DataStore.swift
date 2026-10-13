@@ -16,6 +16,8 @@ private struct Snapshot: Codable {
     var vocabBox: [String: Int] = [:]
     var vocabDue: [String: Date] = [:]
     var quizResults: [QuizResult] = []
+    var chat: [StoredMessage] = []
+    var memory: [String] = []
 }
 
 extension Snapshot {
@@ -29,6 +31,8 @@ extension Snapshot {
         vocabBox = try c.decodeIfPresent([String: Int].self, forKey: .vocabBox) ?? [:]
         vocabDue = try c.decodeIfPresent([String: Date].self, forKey: .vocabDue) ?? [:]
         quizResults = try c.decodeIfPresent([QuizResult].self, forKey: .quizResults) ?? []
+        chat = try c.decodeIfPresent([StoredMessage].self, forKey: .chat) ?? []
+        memory = try c.decodeIfPresent([String].self, forKey: .memory) ?? []
     }
 }
 
@@ -42,6 +46,8 @@ final class DataStore {
     var vocabBox: [String: Int] = [:]
     var vocabDue: [String: Date] = [:]
     var quizResults: [QuizResult] = []
+    var chat: [StoredMessage] = []
+    var memory: [String] = []
 
     private let url: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -56,6 +62,7 @@ final class DataStore {
             mistakes = s.mistakes; lessons = s.lessons; activity = s.activity
             completedLessons = s.completedLessons; vocabBox = s.vocabBox
             vocabDue = s.vocabDue; quizResults = s.quizResults
+            chat = s.chat; memory = s.memory
         }
     }
 
@@ -65,6 +72,16 @@ final class DataStore {
     func add(_ l: SavedLesson) { lessons.insert(l, at: 0); save() }
     func deleteLesson(_ id: UUID) { lessons.removeAll { $0.id == id }; save() }
     func clearMistakes() { mistakes.removeAll(); save() }
+
+    // MARK: Conversation memory
+
+    func appendChat(_ messages: [StoredMessage]) {
+        chat.append(contentsOf: messages)
+        if chat.count > 300 { chat.removeFirst(chat.count - 300) }
+        save()
+    }
+    func clearChat() { chat.removeAll(); save() }
+    func setMemory(_ notes: [String]) { memory = Array(notes.prefix(25)); save() }
 
     // MARK: Activity & streak
 
@@ -144,7 +161,7 @@ final class DataStore {
     private func save() {
         let s = Snapshot(mistakes: mistakes, lessons: lessons, activity: activity,
                          completedLessons: completedLessons, vocabBox: vocabBox,
-                         vocabDue: vocabDue, quizResults: quizResults)
+                         vocabDue: vocabDue, quizResults: quizResults, chat: chat, memory: memory)
         if let data = try? JSONEncoder().encode(s) { try? data.write(to: url, options: .atomic) }
     }
 }

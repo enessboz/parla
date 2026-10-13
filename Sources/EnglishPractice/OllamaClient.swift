@@ -8,11 +8,13 @@ struct OllamaMessage: Codable {
 enum OllamaError: LocalizedError {
     case unreachable
     case badResponse(String)
+    case api(String)
     var errorDescription: String? {
         switch self {
         case .unreachable:
             "Ollama'ya ulaşılamadı. Terminalde `ollama serve` çalışıyor mu ve model indirildi mi (`ollama pull <model>`)?"
         case .badResponse(let s): "Beklenmeyen yanıt: \(s)"
+        case .api(let s): s
         }
     }
 }
@@ -157,6 +159,12 @@ enum Schemas {
             "errors": practiceTurn["properties"].flatMap { ($0 as? [String: Any])?["errors"] } ?? [:],
         ],
         "required": ["corrected", "errors"],
+    ]
+
+    static let memory: [String: Any] = [
+        "type": "object",
+        "properties": ["notes": ["type": "array", "items": ["type": "string"]]],
+        "required": ["notes"],
     ]
 
     static let lesson: [String: Any] = [

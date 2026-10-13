@@ -147,11 +147,25 @@ final class SpeechService: NSObject, AVSpeechSynthesizerDelegate {
         cb?(words)
     }
 
+    /// Waits longer when the sentence sounds unfinished (ends with "and", "because", "um"…) or is very short.
+    private func silenceDelay() -> Double {
+        let base = UserDefaults.standard.object(forKey: "silenceSeconds") as? Double ?? 2.0
+        let words = liveTranscript.lowercased().split(separator: " ")
+        let last = words.last.map(String.init) ?? ""
+        let unfinished: Set<String> = ["and", "but", "because", "so", "or", "if", "when", "that", "with", "to", "the", "a", "an",
+                                       "of", "in", "on", "at", "for", "um", "uh", "like", "then", "also", "my", "i", "is", "are", "was", "were", "have", "has"]
+        var d = base
+        if unfinished.contains(last) { d += 1.5 }
+        if words.count < 3 { d += 0.7 }
+        return d
+    }
+
     private func armSilenceTimer() {
         silenceTask?.cancel()
         guard autoStop, !liveTranscript.isEmpty else { return }
         silenceTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(1.1))
+            let delay = self?.silenceDelay() ?? 2.0
+            try? await Task.sleep(for: .seconds(delay))
             if Task.isCancelled { return }
             self?.stop()
             // Don't wait for the recognizer's final pass: use the partial text if it is slow.

@@ -5,6 +5,7 @@ struct PracticeView: View {
     @Environment(PracticeViewModel.self) private var vm
     @Environment(DataStore.self) private var store
     @FocusState private var focused: Bool
+    @State private var showMemory = false
 
     var body: some View {
         @Bindable var vm = vm
@@ -70,7 +71,19 @@ struct PracticeView: View {
         }
         .navigationTitle("Konuşma Pratiği")
         .onAppear { focused = true }
-        .task { await vm.refreshStatus() }
+        .task {
+            await vm.refreshStatus()
+            await vm.prepare(store: store)
+        }
+        .toolbar {
+            ToolbarItemGroup {
+                Button { showMemory.toggle() } label: { Label("Hafıza", systemImage: "brain") }
+                    .help("Parla'nın senin hakkında hatırladıkları")
+                    .popover(isPresented: $showMemory) { MemoryView() }
+                Button { vm.newConversation(store: store) } label: { Label("Yeni sohbet", systemImage: "square.and.pencil") }
+                    .help("Yeni sohbet başlat (hafıza korunur)")
+            }
+        }
         .alert("İzin gerekli", isPresented: .constant(vm.speech.authorizationDenied)) {
             Button("Tamam") { vm.speech.authorizationDenied = false }
         } message: {
@@ -80,11 +93,44 @@ struct PracticeView: View {
 }
 
 @MainActor
+@MainActor
+struct MemoryView: View {
+    @Environment(DataStore.self) private var store
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Parla seni böyle hatırlıyor").font(.headline)
+            if store.memory.isEmpty {
+                Text("Henüz bir şey yok. Sohbet ettikçe burası dolar.").foregroundStyle(.secondary)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(store.memory.enumerated()), id: \.offset) { i, note in
+                            HStack(alignment: .top) {
+                                Text("• " + note).textSelection(.enabled)
+                                Spacer()
+                                Button { var m = store.memory; m.remove(at: i); store.setMemory(m) } label: { Image(systemName: "xmark.circle") }
+                                    .buttonStyle(.borderless)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 320)
+                Button("Hepsini unut", role: .destructive) { store.setMemory([]) }
+            }
+        }
+        .padding(16)
+        .frame(width: 360)
+    }
+}
+
 extension PracticeView {
     @ViewBuilder var statusBanner: some View {
         switch vm.ollamaStatus {
         case .down:
             banner("Ollama çalışmıyor. Terminal'de `ollama serve` yaz (ya da Ollama uygulamasını aç).")
+        case .needsKey:
+            banner("Claude seçili ama API anahtarı yok. Ayarlar'dan (⌘,) anahtarı gir ya da yerel modele (Ollama) dön.")
         case .modelMissing(let installed):
             banner(installed.isEmpty
                    ? "Hiç model yok. Terminal'de: ollama pull \(UserDefaults.standard.string(forKey: "ollamaModel") ?? "gemma3:4b")"

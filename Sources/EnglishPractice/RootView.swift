@@ -61,27 +61,52 @@ struct RootView: View {
 
 @MainActor
 struct SettingsView: View {
+    @AppStorage("provider") private var provider = "ollama"
+    @AppStorage("level") private var level = "A2"
     @AppStorage("ollamaHost") private var host = "http://localhost:11434"
     @AppStorage("ollamaModel") private var model = "gemma3:4b"
-    @State private var installed: [String] = []
     @AppStorage("autoSpeak") private var autoSpeak = true
     @AppStorage("speechRate") private var rate = 0.5
+    @AppStorage("silenceSeconds") private var silence = 2.0
+    @State private var installed: [String] = []
+    @State private var apiKey = ""
 
     var body: some View {
         Form {
-            TextField("Ollama adresi", text: $host)
-            if installed.isEmpty {
-                TextField("Model", text: $model)
+            Picker("Yapay zekâ", selection: $provider) {
+                Text("Claude (bulut, önerilen)").tag("claude")
+                Text("Ollama (yerel, ücretsiz)").tag("ollama")
+            }
+            if provider == "claude" {
+                SecureField("Claude API anahtarı", text: $apiKey)
+                    .onChange(of: apiKey) { Keychain.set(apiKey, for: "anthropic") }
+                Text("Anahtarı console.anthropic.com adresinden al (Claude aboneliğinden ayrı, kullandıkça ödenir; günlük pratik için çok düşük). Anahtar Mac'in Anahtar Zinciri'nde saklanır.")
+                    .font(.caption).foregroundStyle(.secondary)
             } else {
-                Picker("Model", selection: $model) {
-                    ForEach(installed.contains(model) ? installed : installed + [model], id: \.self) { Text($0).tag($0) }
+                TextField("Ollama adresi", text: $host)
+                if installed.isEmpty {
+                    TextField("Model", text: $model)
+                } else {
+                    Picker("Model", selection: $model) {
+                        ForEach(installed.contains(model) ? installed : installed + [model], id: \.self) { Text($0).tag($0) }
+                    }
                 }
+            }
+            Picker("Seviyem", selection: $level) {
+                ForEach(["A1", "A2", "B1", "B2", "C1"], id: \.self) { Text($0).tag($0) }
             }
             Toggle("Cevapları sesli oku", isOn: $autoSpeak)
             HStack { Text("Konuşma hızı"); Slider(value: $rate, in: 0.3...0.7) }
+            VStack(alignment: .leading) {
+                HStack { Text("Susunca gönder"); Slider(value: $silence, in: 1.0...4.0, step: 0.25); Text(String(format: "%.1f sn", silence)).monospacedDigit() }
+                Text("Sesli modda cümlen bitmeden gönderiyorsa artır.").font(.caption).foregroundStyle(.secondary)
+            }
         }
         .padding(20)
-        .frame(width: 420)
-        .task { installed = (try? await OllamaClient(host: host, model: model).models()) ?? [] }
+        .frame(width: 480)
+        .task {
+            apiKey = Keychain.get("anthropic") ?? ""
+            installed = (try? await OllamaClient(host: host, model: model).models()) ?? []
+        }
     }
 }

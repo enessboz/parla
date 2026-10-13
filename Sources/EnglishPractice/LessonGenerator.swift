@@ -17,7 +17,7 @@ enum LessonGenerator {
     }
 
     @MainActor
-    static func generate(for summary: MistakeSummary, client: OllamaClient) async throws -> SavedLesson {
+    static func generate(for summary: MistakeSummary, client: any LLMClient) async throws -> SavedLesson {
         let samples = summary.examples
             .map { "- \"\($0.original)\" → \"\($0.fixed)\"" }
             .joined(separator: "\n")
