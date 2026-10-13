@@ -93,7 +93,6 @@ struct PracticeView: View {
 }
 
 @MainActor
-@MainActor
 struct MemoryView: View {
     @Environment(DataStore.self) private var store
 
@@ -124,6 +123,7 @@ struct MemoryView: View {
     }
 }
 
+@MainActor
 extension PracticeView {
     @ViewBuilder var statusBanner: some View {
         switch vm.ollamaStatus {

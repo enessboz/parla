@@ -32,7 +32,7 @@ enum LessonGenerator {
         let content = try await client.decode(
             LessonContent.self,
             messages: [OllamaMessage(role: "user", content: prompt)],
-            schema: Schemas.lesson, temperature: 0.5)
+            schema: Schemas.lesson, temperature: 0.5, numPredict: 1200)
         let data = try JSONEncoder().encode(content)
         let lesson = SavedLesson(title: content.title, json: data, focus: summary.kind.rawValue)
         return lesson
