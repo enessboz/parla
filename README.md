@@ -1,3 +1,23 @@
+# Parla — English Practice (Mac sürümü ve ek özellikler)
+
+> Bu proje, **[recepyagmur/EnglishPractice](https://github.com/recepyagmur/EnglishPractice)** uygulamasının (MIT lisansı; içerik: CC BY-SA 4.0)
+> bir türevidir. Asıl emek ona aittir; aşağıdaki orijinal belgelerin hepsi geçerlidir. Bu sürümde eklenenler:
+> **macOS desteği**, **bulut modeller (OpenAI / Claude)**, **uzun süreli sohbet hafızası**, **sohbeti yapay zekânın başlatması**,
+> **sohbeti daha iyi yönlendiren komut**, **eller serbest konuşma modu**. Ayrıntılar için [NOTICE.md](NOTICE.md).
+
+## Mac'te kurulum (3 adım)
+
+1. [main.zip](https://github.com/enessboz/parla/archive/refs/heads/main.zip) dosyasını indirip açın; klasörü **Türkçe karakter ve boşluk içermeyen**
+   bir yere taşıyın (ör. `~/EnglishPractice`).
+2. Terminal'de: `cd ~/EnglishPractice && bash kurulum.sh` — taşınabilir Python iner, tarayıcıda **kurulum sihirbazı** açılır
+   (donanım taraması, model seçimi, ses modelleri). Sisteme bir şey kurulmaz. (Ollama kurulu değilse sihirbaz kendi kopyasını indirir.)
+3. Sonra açmak için: `bash baslat.sh` (ya da sihirbazda seçtiysen masaüstündeki **English Practice.command**).
+
+Daha güçlü ve daha akıllı sohbet için **Ayarlar → ☁️ Bulut modeller**'e OpenAI veya Claude API anahtarı ekleyip modeli seçebilirsin
+(anahtar yalnızca bu Mac'te saklanır). Yeni sürümler uygulama içinden (Ayarlar → 🆕 Güncelleme) alınır.
+
+---
+
 # English Practice — Yerel İngilizce Pratik Uygulaması
 
 Tamamen ücretsiz, çevrimdışı ve **taşınabilir** İngilizce konuşma/yazma pratiği uygulaması.

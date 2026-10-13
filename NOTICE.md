@@ -11,3 +11,11 @@ English Practice — https://github.com/recepyagmur/EnglishPractice
 - **Third-party software and models** downloaded at setup (Python, Ollama, Python packages, Gemma / Qwen,
   Whisper, Kokoro, the Wiktionary dictionary): their own licenses, listed in `README.md`
   ("Kaynaklar, lisanslar ve teşekkürler").
+
+## This fork (enessboz/parla)
+
+Derived from https://github.com/recepyagmur/EnglishPractice (MIT for code, CC BY-SA 4.0 for `app/content/`). Changes made here:
+macOS support (setup/bootstrap.sh, setup/hardware.py, setup/installer.py, app/launcher.py, app/backend/config.py),
+cloud language models (app/backend/cloud_llm.py + settings UI), long-term conversation memory (app/backend/memory.py),
+AI-started conversations and a coaching prompt (app/backend/prompts.py, chat.py), hands-free mode (app/frontend/handsfree.js),
+and an experimental native Swift prototype (native-swift/). The original copyright notices and licenses are kept unchanged.

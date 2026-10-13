@@ -30,7 +30,7 @@ from backend.config import script  # noqa: E402  (Guncelle.bat on Windows, gunce
 PACKAGE_FILES = ROOT / "config" / "package-files.txt"    # what the last package/update shipped
 VERSION_FILE = ROOT / "config" / "package-version.txt"   # the commit it came from
 # Development files stay out of the shared copy (also used by dev/tools/make_package.py).
-EXCLUDE_PREFIXES = ("dev/", "docs/sohbet-arsivi/", ".gitignore", ".gitattributes", "DEVAM.md",
+EXCLUDE_PREFIXES = ("dev/", "native-swift/", ".github/", "docs/sohbet-arsivi/", ".gitignore", ".gitattributes", "DEVAM.md",
                     "ek-ozellik-kurulum-sihirbazi.md", "ingilizce-pratik-uygulamasi.md")
 # Never written or deleted by an update, whatever the zip contains.
 PROTECTED = ("data/", "runtime/", "models/", "logs/", "config/machines/", ".git/")
