@@ -130,7 +130,7 @@ extension PracticeView {
         case .down:
             banner("Ollama çalışmıyor. Terminal'de `ollama serve` yaz (ya da Ollama uygulamasını aç).")
         case .needsKey:
-            banner("Claude seçili ama API anahtarı yok. Ayarlar'dan (⌘,) anahtarı gir ya da yerel modele (Ollama) dön.")
+            banner("Bulut yapay zekâ seçili ama API anahtarı yok. Ayarlar'dan (⌘,) anahtarı gir ya da yerel modele (Ollama) dön.")
         case .modelMissing(let installed):
             banner(installed.isEmpty
                    ? "Hiç model yok. Terminal'de: ollama pull \(UserDefaults.standard.string(forKey: "ollamaModel") ?? "gemma3:4b")"

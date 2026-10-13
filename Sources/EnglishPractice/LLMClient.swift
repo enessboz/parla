@@ -134,3 +134,100 @@ enum Keychain {
         SecItemAdd(add as CFDictionary, nil)
     }
 }
+
+// MARK: - OpenAI API (ChatGPT models)
+
+struct OpenAIClient: LLMClient {
+    var apiKey: String
+    var model: String
+
+    /// Reasoning-style models reject a custom temperature.
+    private var supportsTemperature: Bool {
+        !(model.hasPrefix("gpt-5") || model.hasPrefix("o1") || model.hasPrefix("o3") || model.hasPrefix("o4"))
+    }
+
+    private func makeRequest(_ messages: [OllamaMessage], maxTokens: Int, temperature: Double, stream: Bool, json: Bool) throws -> URLRequest {
+        guard let url = URL(string: "https://api.openai.com/v1/chat/completions") else { throw OllamaError.unreachable }
+        var body: [String: Any] = [
+            "model": model, "stream": stream,
+            "messages": messages.map { ["role": $0.role, "content": $0.content] },
+            "max_completion_tokens": maxTokens,
+        ]
+        if supportsTemperature { body["temperature"] = temperature }
+        if json { body["response_format"] = ["type": "json_object"] }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 60
+        req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return req
+    }
+
+    private static func apiError(status: Int, body: String) -> OllamaError {
+        if status == 401 { return .api("OpenAI API anahtarı geçersiz. Ayarlar'dan (⌘,) kontrol et.") }
+        if body.contains("insufficient_quota") { return .api("OpenAI hesabında kredi/kota yok (platform.openai.com › Billing).") }
+        if status == 429 { return .api("OpenAI istek sınırına takıldı, biraz sonra tekrar dene.") }
+        if status == 404 || body.contains("model_not_found") { return .api("OpenAI bu modeli bulamadı ya da erişimin yok. Ayarlar'dan başka bir model yaz (ör. gpt-4o-mini).") }
+        return .api("OpenAI API hatası (\(status)): \(body.prefix(200))")
+    }
+
+    func stream(_ messages: [OllamaMessage], numPredict: Int, temperature: Double) -> AsyncThrowingStream<String, Error> {
+        let req = try? makeRequest(messages, maxTokens: numPredict, temperature: temperature, stream: true, json: false)
+        return AsyncThrowingStream { cont in
+            guard let req else { cont.finish(throwing: OllamaError.unreachable); return }
+            let task = Task {
+                do {
+                    let (bytes, response): (URLSession.AsyncBytes, URLResponse)
+                    do { (bytes, response) = try await URLSession.shared.bytes(for: req) }
+                    catch { throw OllamaError.api("İnternet bağlantısı yok ya da OpenAI API'ye ulaşılamadı.") }
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                    guard status == 200 else {
+                        var body = ""
+                        for try await line in bytes.lines { body += line }
+                        throw Self.apiError(status: status, body: body)
+                    }
+                    for try await line in bytes.lines {
+                        guard line.hasPrefix("data:") else { continue }
+                        let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+                        if payload == "[DONE]" { break }
+                        guard let d = payload.data(using: .utf8),
+                              let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+                              let choices = o["choices"] as? [[String: Any]],
+                              let delta = choices.first?["delta"] as? [String: Any],
+                              let t = delta["content"] as? String, !t.isEmpty else { continue }
+                        cont.yield(t)
+                    }
+                    cont.finish()
+                } catch {
+                    cont.finish(throwing: error)
+                }
+            }
+            cont.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    func decode<T: Decodable>(_ type: T.Type, messages: [OllamaMessage], schema: [String: Any], temperature: Double, numPredict: Int) async throws -> T {
+        let schemaText = (try? JSONSerialization.data(withJSONObject: schema)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        var msgs = messages
+        let instruction = "\n\nReturn ONLY a valid JSON object (no markdown) that matches this JSON Schema:\n\(schemaText)"
+        if let i = msgs.firstIndex(where: { $0.role == "system" }) { msgs[i].content += instruction }
+        else { msgs.insert(OllamaMessage(role: "system", content: "Output JSON only." + instruction), at: 0) }
+
+        let req = try makeRequest(msgs, maxTokens: max(numPredict, 800), temperature: temperature, stream: false, json: true)
+        let data: Data, response: URLResponse
+        do { (data, response) = try await URLSession.shared.data(for: req) }
+        catch { throw OllamaError.api("İnternet bağlantısı yok ya da OpenAI API'ye ulaşılamadı.") }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else { throw Self.apiError(status: status, body: String(data: data, encoding: .utf8) ?? "") }
+        guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let choices = obj["choices"] as? [[String: Any]],
+              let message = choices.first?["message"] as? [String: Any],
+              var text = message["content"] as? String else { throw OllamaError.badResponse("boş yanıt") }
+        if let a = text.firstIndex(of: "{"), let b = text.lastIndex(of: "}"), a < b { text = String(text[a...b]) }
+        do { return try JSONDecoder().decode(T.self, from: Data(text.utf8)) }
+        catch { throw OllamaError.badResponse(text) }
+    }
+
+    func warmUp() async {}
+}

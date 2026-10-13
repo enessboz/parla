@@ -39,6 +39,10 @@ final class PracticeViewModel {
     /// The active backend: Claude API when selected and a key exists, otherwise local Ollama.
     var client: any LLMClient {
         if provider == "claude", let key = Keychain.get("anthropic"), !key.isEmpty { return ClaudeClient(apiKey: key) }
+        if provider == "openai", let key = Keychain.get("openai"), !key.isEmpty {
+            let m = defaults.string(forKey: "openaiModel") ?? "gpt-4o-mini"
+            return OpenAIClient(apiKey: key, model: m.isEmpty ? "gpt-4o-mini" : m)
+        }
         return ollama
     }
 
@@ -171,8 +175,9 @@ final class PracticeViewModel {
     }
 
     func refreshStatus() async {
-        if provider == "claude" {
-            ollamaStatus = (Keychain.get("anthropic") ?? "").isEmpty ? .needsKey : .ready
+        if provider == "claude" || provider == "openai" {
+            let key = Keychain.get(provider == "claude" ? "anthropic" : "openai") ?? ""
+            ollamaStatus = key.isEmpty ? .needsKey : .ready
             return
         }
         let c = ollama

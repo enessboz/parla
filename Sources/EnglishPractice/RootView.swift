@@ -70,17 +70,26 @@ struct SettingsView: View {
     @AppStorage("silenceSeconds") private var silence = 2.0
     @State private var installed: [String] = []
     @State private var apiKey = ""
+    @State private var openaiKey = ""
+    @AppStorage("openaiModel") private var openaiModel = "gpt-4o-mini"
 
     var body: some View {
         Form {
             Picker("Yapay zekâ", selection: $provider) {
                 Text("Claude (bulut, önerilen)").tag("claude")
+                Text("ChatGPT / OpenAI (bulut)").tag("openai")
                 Text("Ollama (yerel, ücretsiz)").tag("ollama")
             }
             if provider == "claude" {
                 SecureField("Claude API anahtarı", text: $apiKey)
                     .onChange(of: apiKey) { Keychain.set(apiKey, for: "anthropic") }
                 Text("Anahtarı console.anthropic.com adresinden al (Claude aboneliğinden ayrı, kullandıkça ödenir; günlük pratik için çok düşük). Anahtar Mac'in Anahtar Zinciri'nde saklanır.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if provider == "openai" {
+                SecureField("OpenAI API anahtarı", text: $openaiKey)
+                    .onChange(of: openaiKey) { Keychain.set(openaiKey, for: "openai") }
+                TextField("Model", text: $openaiModel)
+                Text("Anahtarı platform.openai.com › API keys sayfasından al. ChatGPT Plus aboneliğinden ayrıdır; kullandıkça ödenir ve hesapta kredi olmalı. Hızlı ve ucuz seçenek: gpt-4o-mini. Daha güçlüsü için gpt-4o yazabilirsin.")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 TextField("Ollama adresi", text: $host)
@@ -106,6 +115,7 @@ struct SettingsView: View {
         .frame(width: 480)
         .task {
             apiKey = Keychain.get("anthropic") ?? ""
+            openaiKey = Keychain.get("openai") ?? ""
             installed = (try? await OllamaClient(host: host, model: model).models()) ?? []
         }
     }
