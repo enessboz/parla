@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct PracticeView: View {
     @Environment(PracticeViewModel.self) private var vm
     @Environment(DataStore.self) private var store
@@ -63,6 +64,7 @@ struct PracticeView: View {
     }
 }
 
+@MainActor
 struct MessageRow: View {
     @Environment(PracticeViewModel.self) private var vm
     let item: ChatItem

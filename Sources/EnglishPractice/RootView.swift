@@ -14,6 +14,7 @@ enum Section: String, CaseIterable, Identifiable {
     }
 }
 
+@MainActor
 struct RootView: View {
     @State private var selection: Section? = .practice
 
@@ -33,6 +34,7 @@ struct RootView: View {
     }
 }
 
+@MainActor
 struct SettingsView: View {
     @AppStorage("ollamaHost") private var host = "http://localhost:11434"
     @AppStorage("ollamaModel") private var model = "gemma3:4b"

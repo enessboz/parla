@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct MistakesView: View {
     @Environment(DataStore.self) private var store
     private var mistakes: [Mistake] { store.mistakes }

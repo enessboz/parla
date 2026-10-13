@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct LessonsView: View {
     @Environment(PracticeViewModel.self) private var vm
     @Environment(DataStore.self) private var store
@@ -56,6 +57,7 @@ struct LessonsView: View {
     }
 }
 
+@MainActor
 struct LessonDetail: View {
     @Environment(PracticeViewModel.self) private var vm
     let content: LessonContent

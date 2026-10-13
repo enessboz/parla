@@ -1,6 +1,7 @@
 import SwiftUI
 
 @main
+@MainActor
 struct EnglishPracticeApp: App {
     @State private var practice = PracticeViewModel()
     @State private var store = DataStore()
