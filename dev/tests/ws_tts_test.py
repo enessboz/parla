@@ -62,7 +62,7 @@ async def turn(ws, header, payload=None, cancel_after_audio=None):
 
 async def main():
     webm = wav_to_webm(SAMPLE)
-    async with websockets.connect("ws://127.0.0.1:8000/ws/voice", max_size=None) as ws:
+    async with websockets.connect("ws://127.0.0.1:" + (sys.argv[1] if len(sys.argv) > 1 else "8000") + "/ws/voice", max_size=None) as ws:
         print("voice turn (cold-ish):")
         await turn(ws, {"type": "audio", "session_id": None, "client_id": "v1", "speak": True}, webm)
         sid = created_sessions[-1]
