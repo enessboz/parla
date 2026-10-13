@@ -19,7 +19,7 @@ from pathlib import Path
 
 from setup import benchmark, hardware, installer, ollama_models
 
-from . import machine, ollama_client
+from . import cloud_llm, machine, ollama_client
 from .config import OLLAMA_MODELS_DIR, ROOT_DIR, ollama_url
 from .ollama_client import OllamaError
 from .settings_store import get_settings
@@ -49,6 +49,8 @@ def default_model() -> str:
 
 
 def display_name(model: str) -> str:
+    if cloud_llm.is_cloud(model):
+        return "☁️ " + cloud_llm.label(model)
     if model == TRANSLATION_MODEL:
         return CATALOG["translation_model"]["name"]
     return CATALOG_BY_ID.get(model, {}).get("name", model)
@@ -120,6 +122,13 @@ class ModelManager:
         """Unload every other model, then load this one (call inside _exclusive)."""
         self.busy, self.busy_model = "loading", model
         self.load_error = None
+        if cloud_llm.is_cloud(model):
+            # A cloud model needs no loading; free the local one's memory.
+            for other in await ollama_client.loaded_models():
+                await ollama_client.unload(other)
+            if not cloud_llm.get_key(cloud_llm.split(model)[0]):
+                self.load_error = f"{cloud_llm.PROVIDERS[cloud_llm.split(model)[0]]['label']} API anahtarı yok."
+            return
         for other in await ollama_client.loaded_models():
             if other != model:
                 await ollama_client.unload(other)
@@ -137,14 +146,26 @@ class ModelManager:
         return self._run(run())
 
     @staticmethod
-    def _chat_models() -> list[str]:
+    def _local_models() -> list[str]:
         # Read from disk, not from Ollama: no await before activate(), so a message sent
         # right after a switch already waits for the new model.
         return [m for m in ollama_models.list_models(OLLAMA_MODELS_DIR) if m != TRANSLATION_MODEL]
 
+    @classmethod
+    def _chat_models(cls) -> list[str]:
+        cloud = [f"{p}:{m}" for p in cloud_llm.configured() for m in cloud_llm.PROVIDERS[p]["fallback"]]
+        return cls._local_models() + cloud
+
+    @staticmethod
+    def _valid_model(model: str) -> bool:
+        """Local model on disk, or "<provider>:<name>" of a provider whose key is set."""
+        if cloud_llm.is_cloud(model):
+            return bool(cloud_llm.get_key(cloud_llm.split(model)[0]))
+        return model in ModelManager._local_models()
+
     async def set_session_model(self, model: str | None) -> None:
-        if model and model not in self._chat_models():
-            raise ModelError("Bu model kurulu değil.")
+        if model and not self._valid_model(model):
+            raise ModelError("Bu model kurulu değil (bulut modeller için önce API anahtarı ekleyin).")
         new = None if model in (None, default_model()) else model
         changed = (new or default_model()) != self.current()
         self.override = new
@@ -152,8 +173,8 @@ class ModelManager:
             self.activate()
 
     async def set_default(self, model: str) -> None:
-        if model not in self._chat_models():
-            raise ModelError("Bu model kurulu değil.")
+        if not self._valid_model(model):
+            raise ModelError("Bu model kurulu değil (bulut modeller için önce API anahtarı ekleyin).")
         before = self.current()
         machine.update_profile({"default_model": model})
         if self.override == model:
@@ -168,6 +189,8 @@ class ModelManager:
             raise ModelError("Hız testi sürerken model silinemez.")
         if self.pull and self.pull["running"] and self.pull["model"] == model:
             raise ModelError("Bu model şu an indiriliyor.")
+        if cloud_llm.is_cloud(model):
+            raise ModelError("Bulut modeller silinmez; anahtarı kaldırmanız yeterli.")
         if model not in await ollama_client.list_models():
             raise ModelError("Bu model kurulu değil.")
         was_current = model == self.current()
@@ -185,6 +208,10 @@ class ModelManager:
     async def installed(self) -> list[dict]:
         bench = machine.load_profile().get("benchmarks", {})
         out = []
+        for p in cloud_llm.configured():
+            for m in cloud_llm.PROVIDERS[p]["fallback"]:
+                out.append({"id": f"{p}:{m}", "name": display_name(f"{p}:{m}"), "size_bytes": 0, "cloud": True,
+                            "parameter_size": None, "quantization": None, "translation": False, "benchmark": None})
         for m in await ollama_client.installed_models():
             name = m["name"]
             details = m.get("details") or {}
@@ -296,7 +323,7 @@ class ModelManager:
     async def start_benchmark(self, models: list[str] | None) -> None:
         if self.bench and self.bench["running"]:
             raise ModelError("Hız testi zaten sürüyor.")
-        chat_models = self._chat_models()
+        chat_models = self._local_models()
         models = [m for m in (models or chat_models) if m in chat_models]
         if not models:
             raise ModelError("Test edilecek kurulu model yok.")

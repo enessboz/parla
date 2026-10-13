@@ -3,6 +3,7 @@ from typing import AsyncIterator
 
 import httpx
 
+from . import cloud_llm
 from .config import OLLAMA_KEEP_ALIVE, OLLAMA_NUM_CTX, SETUP_DIR, ollama_url, script
 
 
@@ -48,6 +49,8 @@ async def loaded_models() -> list[str]:
 
 async def load(model: str) -> None:
     """Load the model into VRAM (raises OllamaError if it cannot be loaded)."""
+    if cloud_llm.is_cloud(model):
+        return  # nothing to load: the model lives in the cloud
     try:
         # Same num_ctx as the chat requests: otherwise Ollama loads the model a second time on
         # the first message (newer Ollama versions pick a different default context size).
@@ -71,6 +74,8 @@ async def preload(model: str) -> None:
 
 async def unload(model: str) -> None:
     """Free the model's (V)RAM now (keep_alive 0)."""
+    if cloud_llm.is_cloud(model):
+        return
     try:
         await _client.post("/api/generate", json={"model": model, "keep_alive": 0})
     except httpx.HTTPError:
@@ -142,6 +147,11 @@ def _payload(model: str, messages: list[dict], stream: bool, **extra) -> dict:
 
 async def complete(model: str, prompt: str, **extra) -> str:
     """One non-streaming answer as plain text."""
+    if cloud_llm.is_cloud(model):
+        try:
+            return await cloud_llm.complete(model, [{"role": "user", "content": prompt}], extra.get("options"))
+        except cloud_llm.CloudError as e:
+            raise OllamaError(str(e)) from e
     payload = _payload(model, [{"role": "user", "content": prompt}], stream=False, **extra)
     try:
         resp = await _client.post("/api/chat", json=payload)
@@ -162,6 +172,13 @@ def _explain_error(status: int, body: str, model: str) -> str:
 
 async def chat_stream(model: str, messages: list[dict], **extra) -> AsyncIterator[str]:
     """Yield content chunks of the assistant reply as they are generated."""
+    if cloud_llm.is_cloud(model):
+        try:
+            async for chunk in cloud_llm.stream(model, messages, extra.get("options")):
+                yield chunk
+        except cloud_llm.CloudError as e:
+            raise OllamaError(str(e)) from e
+        return
     payload = _payload(model, messages, stream=True, **extra)
     try:
         async with _client.stream("POST", "/api/chat", json=payload) as resp:
@@ -189,6 +206,11 @@ async def chat_stream(model: str, messages: list[dict], **extra) -> AsyncIterato
 
 async def chat_json(model: str, messages: list[dict], schema: dict, **extra) -> dict:
     """Non-streaming call that forces structured JSON output matching `schema`."""
+    if cloud_llm.is_cloud(model):
+        try:
+            return await cloud_llm.chat_json(model, messages, schema, extra.get("options"))
+        except cloud_llm.CloudError as e:
+            raise OllamaError(str(e)) from e
     payload = _payload(model, messages, stream=False, format=schema, **extra)
     try:
         resp = await _client.post("/api/chat", json=payload)
