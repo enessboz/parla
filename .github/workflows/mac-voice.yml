@@ -47,3 +47,4 @@ jobs:
           set -o pipefail
           runtime/python/bin/python3 dev/tests/ws_tts_test.py 8100 2>&1 | tee /tmp/tts.out || { tail -15 /tmp/tts.out | while IFS= read -r l; do echo "::error::${l:0:400}"; done; exit 1; }
           echo "::notice::ws_tts_test $(tail -12 /tmp/tts.out | tr '\n' '|' | head -c 900)"
+# rerun
