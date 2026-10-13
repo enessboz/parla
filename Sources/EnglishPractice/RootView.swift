@@ -1,0 +1,52 @@
+import SwiftUI
+
+enum Section: String, CaseIterable, Identifiable {
+    case practice = "Konuşma Pratiği"
+    case mistakes = "Hatalarım"
+    case lessons = "Özel Dersler"
+    var id: String { rawValue }
+    var icon: String {
+        switch self {
+        case .practice: "bubble.left.and.bubble.right"
+        case .mistakes: "exclamationmark.bubble"
+        case .lessons: "graduationcap"
+        }
+    }
+}
+
+struct RootView: View {
+    @State private var selection: Section? = .practice
+
+    var body: some View {
+        NavigationSplitView {
+            List(Section.allCases, selection: $selection) { s in
+                Label(s.rawValue, systemImage: s.icon).tag(s)
+            }
+            .navigationSplitViewColumnWidth(min: 180, ideal: 210)
+        } detail: {
+            switch selection ?? .practice {
+            case .practice: PracticeView()
+            case .mistakes: MistakesView()
+            case .lessons: LessonsView()
+            }
+        }
+    }
+}
+
+struct SettingsView: View {
+    @AppStorage("ollamaHost") private var host = "http://localhost:11434"
+    @AppStorage("ollamaModel") private var model = "gemma3:4b"
+    @AppStorage("autoSpeak") private var autoSpeak = true
+    @AppStorage("speechRate") private var rate = 0.5
+
+    var body: some View {
+        Form {
+            TextField("Ollama adresi", text: $host)
+            TextField("Model", text: $model)
+            Toggle("Cevapları sesli oku", isOn: $autoSpeak)
+            HStack { Text("Konuşma hızı"); Slider(value: $rate, in: 0.3...0.7) }
+        }
+        .padding(20)
+        .frame(width: 420)
+    }
+}
