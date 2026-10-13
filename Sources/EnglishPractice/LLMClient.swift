@@ -124,14 +124,15 @@ enum Keychain {
         return String(data: d, encoding: .utf8)
     }
 
-    static func set(_ value: String, for account: String) {
+    @discardableResult
+    static func set(_ value: String, for account: String) -> Bool {
         let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
                                    kSecAttrAccount as String: account]
         SecItemDelete(base as CFDictionary)
-        guard !value.isEmpty else { return }
+        guard !value.isEmpty else { return true }
         var add = base
         add[kSecValueData as String] = Data(value.utf8)
-        SecItemAdd(add as CFDictionary, nil)
+        return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 }
 
@@ -146,13 +147,17 @@ struct OpenAIClient: LLMClient {
         !(model.hasPrefix("gpt-5") || model.hasPrefix("o1") || model.hasPrefix("o3") || model.hasPrefix("o4"))
     }
 
+    private var isReasoning: Bool { !supportsTemperature }
+
     private func makeRequest(_ messages: [OllamaMessage], maxTokens: Int, temperature: Double, stream: Bool, json: Bool) throws -> URLRequest {
         guard let url = URL(string: "https://api.openai.com/v1/chat/completions") else { throw OllamaError.unreachable }
+        // Reasoning models spend part of the budget on hidden thinking, so give them more room.
         var body: [String: Any] = [
             "model": model, "stream": stream,
             "messages": messages.map { ["role": $0.role, "content": $0.content] },
-            "max_completion_tokens": maxTokens,
+            "max_completion_tokens": isReasoning ? max(maxTokens * 8, 1500) : maxTokens,
         ]
+        if model == "gpt-5" || model == "gpt-5-mini" || model == "gpt-5-nano" { body["reasoning_effort"] = "minimal" }
         if supportsTemperature { body["temperature"] = temperature }
         if json { body["response_format"] = ["type": "json_object"] }
         var req = URLRequest(url: url)
@@ -230,4 +235,130 @@ struct OpenAIClient: LLMClient {
     }
 
     func warmUp() async {}
+}
+
+/// API keys: Keychain when it works; if the Keychain refuses (common for unsigned apps), a private fallback in UserDefaults.
+enum Secrets {
+    private static func fallbackKey(_ a: String) -> String { "secret.\(a)" }
+
+    static func get(_ account: String) -> String? {
+        if let v = Keychain.get(account), !v.isEmpty { return v }
+        if let v = UserDefaults.standard.string(forKey: fallbackKey(account)), !v.isEmpty { return v }
+        return nil
+    }
+
+    static func set(_ value: String, for account: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if Keychain.set(trimmed, for: account), Keychain.get(account) == trimmed || trimmed.isEmpty {
+            UserDefaults.standard.removeObject(forKey: fallbackKey(account))
+        } else {
+            UserDefaults.standard.set(trimmed, forKey: fallbackKey(account))
+        }
+    }
+}
+
+// MARK: - Backend selection
+
+struct MissingKeyClient: LLMClient {
+    var provider: String
+    private var error: OllamaError { .api("\(provider) için API anahtarı yok. Ayarlar'dan (⌘,) anahtarı gir ya da yerel modele (Ollama) dön.") }
+    func stream(_ messages: [OllamaMessage], numPredict: Int, temperature: Double) -> AsyncThrowingStream<String, Error> {
+        let e = error
+        return AsyncThrowingStream { $0.finish(throwing: e) }
+    }
+    func decode<T: Decodable>(_ type: T.Type, messages: [OllamaMessage], schema: [String: Any], temperature: Double, numPredict: Int) async throws -> T { throw error }
+    func warmUp() async {}
+}
+
+enum ClientFactory {
+    static let defaultClaude = "claude-haiku-5-5"
+    static let defaultOpenAI = "gpt-4o"
+
+    static func current() -> any LLMClient {
+        let d = UserDefaults.standard
+        switch d.string(forKey: "provider") ?? "ollama" {
+        case "claude":
+            guard let key = Secrets.get("anthropic") else { return MissingKeyClient(provider: "Claude") }
+            let m = d.string(forKey: "claudeModel") ?? ""
+            return ClaudeClient(apiKey: key, model: m.isEmpty ? defaultClaude : m)
+        case "openai":
+            guard let key = Secrets.get("openai") else { return MissingKeyClient(provider: "OpenAI") }
+            let m = d.string(forKey: "openaiModel") ?? ""
+            return OpenAIClient(apiKey: key, model: m.isEmpty ? defaultOpenAI : m)
+        default:
+            return OllamaClient(host: d.string(forKey: "ollamaHost") ?? "http://localhost:11434",
+                                model: d.string(forKey: "ollamaModel") ?? "gemma3:4b")
+        }
+    }
+
+    /// Shown in the chat header so it is always clear who you are talking to.
+    static func label() -> String {
+        let d = UserDefaults.standard
+        switch d.string(forKey: "provider") ?? "ollama" {
+        case "claude": return "Claude · " + ((d.string(forKey: "claudeModel") ?? "").isEmpty ? defaultClaude : d.string(forKey: "claudeModel")!)
+        case "openai": return "OpenAI · " + ((d.string(forKey: "openaiModel") ?? "").isEmpty ? defaultOpenAI : d.string(forKey: "openaiModel")!)
+        default: return "Ollama (yerel) · " + (d.string(forKey: "ollamaModel") ?? "gemma3:4b")
+        }
+    }
+}
+
+// MARK: - Live model lists
+
+enum ModelCatalog {
+    static let claudeFallback = ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1"]
+
+    static func openAI(key: String) async -> [String] {
+        guard let url = URL(string: "https://api.openai.com/v1/models") else { return [] }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 15
+        req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let list = obj["data"] as? [[String: Any]] else { return [] }
+        let banned = ["audio", "realtime", "transcribe", "tts", "image", "search", "instruct", "embedding", "moderation", "vision", "codex", "whisper", "dall", "computer", "chat-latest", "deep-research"]
+        let ids = list.compactMap { $0["id"] as? String }.filter { id in
+            (id.hasPrefix("gpt-") || id.hasPrefix("o1") || id.hasPrefix("o3") || id.hasPrefix("o4"))
+            && !banned.contains(where: { id.contains($0) })
+            && id.range(of: #"-\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) == nil
+            && id.range(of: #"-\d{4}$"#, options: .regularExpression) == nil
+        }
+        return Array(Set(ids)).sorted()
+    }
+
+    /// The strongest few models first (newest GPT-5 family, then 4.1), always followed by gpt-4o.
+    static func recommendedOpenAI(_ all: [String]) -> [String] {
+        func rank(_ id: String) -> (Int, String) {
+            if id.hasPrefix("gpt-5") { return (0, id) }
+            if id.hasPrefix("gpt-4.1") { return (1, id) }
+            if id.hasPrefix("o3") || id.hasPrefix("o4") { return (2, id) }
+            return (9, id)
+        }
+        var top = all.filter { rank($0).0 < 9 && !$0.contains("nano") }
+            .sorted { a, b in
+                let ra = rank(a), rb = rank(b)
+                if ra.0 != rb.0 { return ra.0 < rb.0 }
+                let am = a.contains("mini"), bm = b.contains("mini")
+                if am != bm { return !am }
+                return a > b
+            }
+        top = Array(top.prefix(4))
+        for must in ["gpt-4o", "gpt-4o-mini"] where all.contains(must) && !top.contains(must) { top.append(must) }
+        if top.isEmpty { top = ["gpt-4o", "gpt-4o-mini"] }
+        return top
+    }
+
+    static func claude(key: String) async -> [String] {
+        guard let url = URL(string: "https://api.anthropic.com/v1/models?limit=100") else { return claudeFallback }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 15
+        req.setValue(key, forHTTPHeaderField: "x-api-key")
+        req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let list = obj["data"] as? [[String: Any]] else { return claudeFallback }
+        let ids = list.compactMap { $0["id"] as? String }
+        return ids.isEmpty ? claudeFallback : ids
+    }
 }

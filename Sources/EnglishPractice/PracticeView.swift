@@ -70,6 +70,7 @@ struct PracticeView: View {
             .background(.bar)
         }
         .navigationTitle("Konuşma Pratiği")
+        .navigationSubtitle(vm.activeLabel)
         .onAppear { focused = true }
         .task {
             await vm.refreshStatus()
