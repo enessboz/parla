@@ -38,17 +38,25 @@ struct RootView: View {
 struct SettingsView: View {
     @AppStorage("ollamaHost") private var host = "http://localhost:11434"
     @AppStorage("ollamaModel") private var model = "gemma3:4b"
+    @State private var installed: [String] = []
     @AppStorage("autoSpeak") private var autoSpeak = true
     @AppStorage("speechRate") private var rate = 0.5
 
     var body: some View {
         Form {
             TextField("Ollama adresi", text: $host)
-            TextField("Model", text: $model)
+            if installed.isEmpty {
+                TextField("Model", text: $model)
+            } else {
+                Picker("Model", selection: $model) {
+                    ForEach(installed.contains(model) ? installed : installed + [model], id: \.self) { Text($0).tag($0) }
+                }
+            }
             Toggle("Cevapları sesli oku", isOn: $autoSpeak)
             HStack { Text("Konuşma hızı"); Slider(value: $rate, in: 0.3...0.7) }
         }
         .padding(20)
         .frame(width: 420)
+        .task { installed = (try? await OllamaClient(host: host, model: model).models()) ?? [] }
     }
 }

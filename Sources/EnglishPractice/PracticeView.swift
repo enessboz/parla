@@ -9,6 +9,7 @@ struct PracticeView: View {
     var body: some View {
         @Bindable var vm = vm
         VStack(spacing: 0) {
+            statusBanner
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 14) {
@@ -33,6 +34,12 @@ struct PracticeView: View {
             }
 
             HStack(spacing: 10) {
+                Toggle(isOn: Binding(get: { vm.voiceMode }, set: { vm.setVoiceMode($0, store: store) })) {
+                    Image(systemName: "waveform")
+                }
+                .toggleStyle(.button)
+                .help("Sesli mod: konuş, cevabı dinle, tekrar konuş (eller serbest)")
+
                 Button { Task { await vm.toggleMic() } } label: {
                     Image(systemName: vm.speech.isListening ? "stop.circle.fill" : "mic.circle.fill")
                         .font(.system(size: 30))
@@ -56,11 +63,39 @@ struct PracticeView: View {
         }
         .navigationTitle("Konuşma Pratiği")
         .onAppear { focused = true }
+        .task { await vm.refreshStatus() }
         .alert("İzin gerekli", isPresented: .constant(vm.speech.authorizationDenied)) {
             Button("Tamam") { vm.speech.authorizationDenied = false }
         } message: {
             Text("Sistem Ayarları › Gizlilik ve Güvenlik bölümünden mikrofon ve konuşma tanıma izni ver.")
         }
+    }
+}
+
+@MainActor
+extension PracticeView {
+    @ViewBuilder var statusBanner: some View {
+        switch vm.ollamaStatus {
+        case .down:
+            banner("Ollama çalışmıyor. Terminal'de `ollama serve` yaz (ya da Ollama uygulamasını aç).")
+        case .modelMissing(let installed):
+            banner(installed.isEmpty
+                   ? "Hiç model yok. Terminal'de: ollama pull \(UserDefaults.standard.string(forKey: "ollamaModel") ?? "gemma3:4b")"
+                   : "Seçili model kurulu değil. Ayarlar'dan (⌘,) şunlardan birini seç: \(installed.joined(separator: ", "))")
+        default:
+            EmptyView()
+        }
+    }
+
+    private func banner(_ text: String) -> some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+            Text(text).font(.callout)
+            Spacer()
+            Button("Yeniden dene") { Task { await vm.refreshStatus() } }
+        }
+        .padding(10)
+        .background(.orange.opacity(0.18))
     }
 }
 

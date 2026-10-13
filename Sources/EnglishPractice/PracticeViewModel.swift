@@ -11,6 +11,9 @@ final class PracticeViewModel {
     var pendingWords: [SpokenWord] = []
     var isBusy = false
     var errorMessage: String?
+    var voiceMode = false
+    var ollamaStatus: OllamaStatus = .unknown
+    private var store: DataStore?
 
     let speech = SpeechService()
 
@@ -39,8 +42,37 @@ final class PracticeViewModel {
                 guard let self else { return }
                 self.pendingWords = words
                 self.draft = words.map(\.text).joined(separator: " ")
+                if self.voiceMode, let store = self.store, !self.draft.isEmpty {
+                    Task { await self.send(store: store) }
+                }
             }
         }
+    }
+
+    /// Hands-free conversation: listen → send → speak reply → listen again.
+    func setVoiceMode(_ on: Bool, store: DataStore) {
+        voiceMode = on
+        speech.autoStop = on
+        if on {
+            self.store = store
+            speech.onSpeakFinished = { [weak self] in
+                guard let self, self.voiceMode, !self.speech.isListening else { return }
+                Task { await self.toggleMic() }
+            }
+            if !speech.isListening { Task { await toggleMic() } }
+        } else {
+            speech.onSpeakFinished = nil
+            if speech.isListening { speech.stop() }
+        }
+    }
+
+    func refreshStatus() async {
+        let c = client
+        do {
+            let installed = try await c.models()
+            if installed.contains(c.model) || installed.contains(c.model + ":latest") { ollamaStatus = .ready }
+            else { ollamaStatus = .modelMissing(installed) }
+        } catch { ollamaStatus = .down }
     }
 
     func send(store: DataStore) async {
@@ -77,9 +109,14 @@ final class PracticeViewModel {
                 store.add(Mistake(category: e.category, original: e.original, fixed: e.fixed, explanation: e.explanation))
             }
             items.append(ChatItem(role: .assistant, text: turn.reply))
-            if autoSpeak { speech.speak(turn.reply, rate: speechRate) }
+            if autoSpeak || voiceMode { speech.speak(turn.reply, rate: speechRate) }
         } catch {
             errorMessage = error.localizedDescription
         }
     }
+}
+
+enum OllamaStatus {
+    case unknown, ready, down
+    case modelMissing([String])
 }

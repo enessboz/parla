@@ -53,6 +53,19 @@ struct OllamaClient {
         return content
     }
 
+    /// Names of locally installed models.
+    func models() async throws -> [String] {
+        guard let url = URL(string: host)?.appendingPathComponent("api/tags") else { throw OllamaError.unreachable }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 4
+        let data: Data
+        do { (data, _) = try await URLSession.shared.data(for: req) }
+        catch { throw OllamaError.unreachable }
+        guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let list = obj["models"] as? [[String: Any]] else { return [] }
+        return list.compactMap { $0["name"] as? String }.sorted()
+    }
+
     func decode<T: Decodable>(_ type: T.Type, messages: [OllamaMessage], schema: [String: Any], temperature: Double = 0.3) async throws -> T {
         let text = try await chat(messages, schema: schema, temperature: temperature)
         do { return try JSONDecoder().decode(T.self, from: Data(text.utf8)) }

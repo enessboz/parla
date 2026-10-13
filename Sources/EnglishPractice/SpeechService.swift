@@ -10,6 +10,10 @@ final class SpeechService: NSObject, AVSpeechSynthesizerDelegate {
     var isListening = false
     var liveTranscript = ""
     var authorizationDenied = false
+    /// When true, listening stops by itself after a short silence (hands-free mode).
+    var autoStop = false
+    var onSpeakFinished: (() -> Void)?
+    private var silenceTask: Task<Void, Never>?
 
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private let engine = AVAudioEngine()
@@ -61,6 +65,7 @@ final class SpeechService: NSObject, AVSpeechSynthesizerDelegate {
                 guard let self else { return }
                 if let result {
                     self.liveTranscript = result.bestTranscription.formattedString
+                    self.armSilenceTimer()
                     if result.isFinal {
                         let words = result.bestTranscription.segments.map {
                             SpokenWord(text: $0.substring, confidence: $0.confidence)
@@ -85,6 +90,7 @@ final class SpeechService: NSObject, AVSpeechSynthesizerDelegate {
     private func finish(words: [SpokenWord]) {
         guard isListening else { return }
         isListening = false
+        silenceTask?.cancel()
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)
         task = nil
@@ -92,6 +98,15 @@ final class SpeechService: NSObject, AVSpeechSynthesizerDelegate {
         let cb = onFinal
         onFinal = nil
         cb?(words)
+    }
+
+    private func armSilenceTimer() {
+        silenceTask?.cancel()
+        guard autoStop, !liveTranscript.isEmpty else { return }
+        silenceTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.7))
+            if !Task.isCancelled { self?.stop() }
+        }
     }
 
     // MARK: Synthesis
@@ -111,7 +126,10 @@ final class SpeechService: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) {
-        Task { @MainActor in self.isSpeaking = false }
+        Task { @MainActor in
+            self.isSpeaking = false
+            self.onSpeakFinished?()
+        }
     }
     nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) {
         Task { @MainActor in self.isSpeaking = false }
