@@ -11,7 +11,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build
-        run: ./build_app.sh
+        run: |
+          set -o pipefail
+          ./build_app.sh 2>&1 | tee build.log || {
+            grep -E "error:" build.log | sort -u | head -9 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
+            exit 1
+          }
       - name: Zip
         run: ditto -c -k --keepParent EnglishPractice.app EnglishPractice-mac.zip
       - uses: actions/upload-artifact@v4
